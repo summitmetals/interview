@@ -11,6 +11,15 @@ const taskSchema = Joi.object({
   dependencies: Joi.array().items(Joi.string()).default([])
 });
 
+const updateTaskSchema = Joi.object({
+  title: Joi.string().trim(),
+  description: Joi.string().trim(),
+  dueDate: Joi.date().greater("now"),
+  status: Joi.string().valid(...Object.values(TaskStatus)),
+  priority: Joi.string().valid(...Object.values(TaskPriority)),
+  tags: Joi.array().items(Joi.string()),
+});
+
 exports.validateTask = (req, res, next) => {
   const { error } = taskSchema.validate(req.body, { abortEarly: false });
   
@@ -21,6 +30,18 @@ exports.validateTask = (req, res, next) => {
     });
   }
 
+  next();
+};
+
+exports.validateTaskUpdate = (req, res, next) => {
+  const { error } = updateTaskSchema.validate(req.body, { abortEarly: false });
+
+  if (error) {
+    return res.status(400).json({
+      error: "Validation Error",
+      details: error.details.map((detail) => detail.message),
+    });
+  }
   next();
 };
 

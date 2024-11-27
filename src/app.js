@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
+const taskRoutes = require("./routes/tasks");
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -16,8 +17,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// TODO: Add your routes here
-// Example: app.use('/api/tasks', taskRoutes);
+app.use('/api/tasks', taskRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
