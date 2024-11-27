@@ -11,6 +11,28 @@ const taskSchema = Joi.object({
   dependencies: Joi.array().items(Joi.string()).default([])
 });
 
+const updateTaskSchema = Joi.object({
+  title: Joi.string().trim(),
+  description: Joi.string().trim(),
+  dueDate: Joi.date().greater("now"),
+  status: Joi.string().valid(...Object.values(TaskStatus)),
+  priority: Joi.string().valid(...Object.values(TaskPriority)),
+  tags: Joi.array().items(Joi.string()),
+});
+
+const batchUpdateSchema = Joi.array().items(
+  Joi.object({
+    id: Joi.number().integer().required(), // Ensure `id` is a valid integer
+    title: Joi.string().optional(),
+    description: Joi.string().optional(),
+    status: Joi.string()
+      .valid('pending', 'in-progress', 'completed', 'archived')
+      .optional(),
+    priority: Joi.string().valid('low', 'medium', 'high').optional(),
+    tags: Joi.array().items(Joi.string()).optional(),
+  })
+);
+
 exports.validateTask = (req, res, next) => {
   const { error } = taskSchema.validate(req.body, { abortEarly: false });
   
@@ -21,6 +43,18 @@ exports.validateTask = (req, res, next) => {
     });
   }
 
+  next();
+};
+
+exports.validateTaskUpdate = (req, res, next) => {
+  const { error } = updateTaskSchema.validate(req.body, { abortEarly: false });
+
+  if (error) {
+    return res.status(400).json({
+      error: "Validation Error",
+      details: error.details.map((detail) => detail.message),
+    });
+  }
   next();
 };
 
@@ -56,6 +90,23 @@ exports.validateStatusTransition = (req, res, next) => {
 
   next();
 };
+
+exports.validateBatchUpdate = (req, res, next) => {
+  console.log("Validating request body in middleware:", req.body); // Log the request body
+  const { error } = batchUpdateSchema.validate(req.body, { abortEarly: false });
+
+  if (error) {
+    console.error("Validation error details:", error.details); // Log detailed validation errors
+    return res.status(400).json({
+      error: 'Validation error',
+      details: error.details.map((detail) => detail.message),
+    });
+  }
+
+  console.log("Validation passed for batch update."); // Log success
+  next();
+};
+
 
 // Validation for query parameters
 exports.validateQueryParams = (req, res, next) => {

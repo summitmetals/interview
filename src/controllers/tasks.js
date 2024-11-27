@@ -63,31 +63,47 @@ exports.getTasks = async (req, res) => {
   }
 };
 
-exports.getTaskById = async (req, res) => {
-  const task = tasks.get(parseInt(req.params.id));
-  if (!task) {
-    return res.status(404).json({ error: 'Task not found' });
+exports.getTaskById = async (taskId) => {
+  console.log("Fetching task ID:", taskId); // Debugging log
+
+  // Ensure `taskId` is a valid number
+  if (isNaN(taskId) || taskId == null) {
+    console.warn(`Invalid task ID: ${taskId}`);
+    return null; // Return `null` if the ID is invalid
   }
-  res.json(task);
+
+  const task = tasks.get(taskId);
+
+  if (!task) {
+    console.warn(`Task with ID ${taskId} not found.`);
+    return null;
+  }
+
+  return task;
 };
+
 
 exports.updateTask = async (req, res) => {
   try {
-    const task = tasks.get(parseInt(req.params.id));
-    if (!task) {
-      return res.status(404).json({ error: 'Task not found' });
+    const { task } = req; // The task is already retrieved and attached to req in the middleware
+    const { status: newStatus, ...updateData } = req.body; // Destructure to get the new status and other fields
+
+    // Check if the status transition is allowed (already handled by middleware)
+    if (newStatus) {
+      // Only update status if it's provided in the request
+      task.status = newStatus;
     }
 
-    // Check status transition
-    if (req.body.status && !task.canTransitionTo(req.body.status)) {
-      return res.status(400).json({ error: 'Invalid status transition' });
-    }
-
-    task.update(req.body);
+    // Update other task fields
+    Object.assign(task, updateData); // Update the task with the fields provided in the request
     task.validate();
-    res.json(task);
+
+    // If everything is valid, return the updated task
+    res.status(200).json(task);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res
+      .status(400)
+      .json({ error: "Internal Server Error", message: error.message });
   }
 };
 
@@ -144,6 +160,103 @@ exports.batchCreateTasks = async (req, res) => {
     // If all validations pass, save the tasks
     createdTasks.forEach(task => tasks.set(task.id, task));
     res.status(201).json(createdTasks);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.batchUpdateTasks = async (req, res) => {
+  const updates = req.body;
+
+  console.log("Received updates:", updates); // Log the request body to confirm its structure
+
+  // Check if the request body is an array
+  if (!Array.isArray(updates)) {
+    console.error("Request body is not an array.");
+    return res.status(400).json({ error: 'Request body must be an array' });
+  }
+
+  const updatedTasks = [];
+  const errors = [];
+
+  try {
+    for (const update of updates) {
+      const { id, ...updateFields } = update;
+
+      console.log("Raw ID received:", id); // Log the raw ID to check its value
+
+      // Parse the ID and validate it
+      const taskId = parseInt(id, 10); // Ensure we get a valid integer
+      if (isNaN(taskId)) {
+        console.warn(`Invalid ID: ${id}`); // Log invalid ID
+        errors.push(`Invalid ID for task update: ${id}`);
+        continue; // Skip this update and move to the next one
+      }
+
+      // Fetch the task by ID
+      const task = await taskController.getTaskById(taskId);
+
+      // If the task is not found, collect the error
+      if (!task) {
+        console.warn(`Task with ID ${taskId} not found.`);
+        errors.push(`Task with ID ${taskId} not found`);
+        continue; // Skip this update and move to the next one
+      }
+
+      // Apply the valid update to the task
+      Object.assign(task, updateFields, { updatedAt: new Date() });
+      updatedTasks.push(task);
+    }
+
+    // If there are any errors, return a 404 with error details
+    if (errors.length > 0) {
+      console.error("Batch operation failed with errors:", errors);
+      return res.status(404).json({ error: 'Batch operation failed', details: errors });
+    }
+
+    // If there are no errors, return the updated tasks
+    res.status(200).json(updatedTasks);
+  } catch (error) {
+    // Catch any unexpected errors and return a 400 response
+    console.error("Unexpected error:", error);
+    res.status(400).json({ error: 'Batch operation failed', details: error.message });
+  }
+};
+
+
+
+exports.batchDeleteTasks = async (req, res) => {
+  if (!Array.isArray(req.body)) {
+    return res.status(400).json({ error: "Request body must be an array" });
+  }
+
+  try {
+    const deletedTasks = [];
+    for (const taskId of req.body) {
+      const task = tasks.get(taskId); // Retrieve task by ID
+      if (!task) {
+        return res
+          .status(404)
+          .json({ error: `Task with ID ${taskId} not found` });
+      }
+
+      // Check for dependencies and ensure the task can be safely deleted
+      const dependentTasks = Array.from(tasks.values()).filter(
+        (dependentTask) => dependentTask.dependencies.includes(taskId)
+      );
+
+      if (dependentTasks.length > 0) {
+        return res.status(400).json({
+          error: "Task has dependencies",
+          message: `Cannot delete task with ID ${taskId} as it has dependent tasks`,
+        });
+      }
+
+      tasks.delete(taskId); // Delete the task from the map
+      deletedTasks.push(task);
+    }
+
+    res.status(200).json(deletedTasks); // Return the list of deleted tasks
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

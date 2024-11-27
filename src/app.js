@@ -1,9 +1,21 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
+const taskRoutes = require('./routes/tasks');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: {
+    error: 'Rate limit exceeded. Please try again later.',
+  },
+});
+
+app.use('/api/', limiter);
 
 // Middleware
 app.use(cors());
@@ -16,8 +28,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// TODO: Add your routes here
-// Example: app.use('/api/tasks', taskRoutes);
+app.use('/api/tasks', taskRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
