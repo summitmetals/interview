@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { validateTask, validateTaskUpdate, validateStatusTransition } = require('../middleware/validation');
+const { validateTask, validateTaskUpdate, validateStatusTransition, validateBatchUpdate } = require('../middleware/validation');
 const taskController = require('../controllers/tasks');
 
 // Create task
@@ -34,7 +34,6 @@ router.put(
     async (req, res, next) => {
       try {
         const taskId = parseInt(req.params.id, 10); // Extract task ID from the URL
-        console.log("Task ID received:", taskId); // Debugging log
         const task = await taskController.getTaskById(taskId); // Fetch the task
   
         if (!task) {
@@ -63,7 +62,7 @@ router.get('/search', taskController.searchTasks);
 
 // Batch operations
 router.post('/batch', taskController.batchCreateTasks);
-router.put('/batch', taskController.batchUpdateTasks);
+router.put('/batch', validateBatchUpdate, taskController.batchUpdateTasks);
 router.delete('/batch', taskController.batchDeleteTasks);
 
 // Analytics endpoints
