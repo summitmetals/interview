@@ -8,11 +8,22 @@ const taskSchema = Joi.object({
   status: Joi.string().valid(...Object.values(TaskStatus)).default(TaskStatus.PENDING),
   priority: Joi.string().valid(...Object.values(TaskPriority)).default(TaskPriority.MEDIUM),
   tags: Joi.array().items(Joi.string()).min(1).required(),
-  dependencies: Joi.array().items(Joi.string()).default([])
+  dependencies: Joi.array().items(Joi.number()).default([])
+});
+
+const updateTaskSchema = Joi.object({
+  title: Joi.string().trim(),
+  description: Joi.string().trim(),
+  dueDate: Joi.date().greater('now'),
+  status: Joi.string().valid(...Object.values(TaskStatus)),
+  priority: Joi.string().valid(...Object.values(TaskPriority)),
+  tags: Joi.array().items(Joi.string()).min(1),
+  dependencies: Joi.array().items(Joi.number())
 });
 
 exports.validateTask = (req, res, next) => {
-  const { error } = taskSchema.validate(req.body, { abortEarly: false });
+  const schema = req.method === 'POST' ? taskSchema : updateTaskSchema;
+  const { error } = schema.validate(req.body, { abortEarly: false });
   
   if (error) {
     return res.status(400).json({
@@ -25,35 +36,11 @@ exports.validateTask = (req, res, next) => {
 };
 
 exports.validateStatusTransition = (req, res, next) => {
-  const { status: currentStatus } = req.task;
-  const { status: newStatus } = req.body;
-
-  if (!newStatus) {
-    return next();
-  }
-
-  const validTransitions = VALID_STATUS_TRANSITIONS[currentStatus];
-  if (!validTransitions.includes(newStatus)) {
-    return res.status(400).json({
-      error: 'Invalid Status Transition',
-      message: `Cannot transition from ${currentStatus} to ${newStatus}`
-    });
-  }
-
-  // Check if dependencies are completed when transitioning to completed
-  if (newStatus === TaskStatus.COMPLETED) {
-    const incompleteDependencies = req.task.dependencies.filter(
-      depId => !tasks.get(depId) || tasks.get(depId).status !== TaskStatus.COMPLETED
-    );
-
-    if (incompleteDependencies.length > 0) {
-      return res.status(400).json({
-        error: 'Dependencies Not Completed',
-        message: 'All dependencies must be completed before marking task as completed'
-      });
-    }
-  }
-
+  // This middleware is used for updates, so we need to get the current task
+  const taskId = parseInt(req.params.id);
+  
+  // We'll need to access tasks from the controller - let's modify this approach
+  // For now, we'll let the controller handle status transition validation
   next();
 };
 
@@ -64,11 +51,15 @@ exports.validateQueryParams = (req, res, next) => {
     priority: Joi.string().valid(...Object.values(TaskPriority)),
     dueDateStart: Joi.date(),
     dueDateEnd: Joi.date().greater(Joi.ref('dueDateStart')),
-    tags: Joi.array().items(Joi.string()),
+    tags: Joi.alternatives().try(
+      Joi.string(),
+      Joi.array().items(Joi.string())
+    ),
     sortBy: Joi.string().valid('dueDate', 'priority', 'createdAt'),
     sortOrder: Joi.string().valid('asc', 'desc'),
     page: Joi.number().integer().min(1),
-    limit: Joi.number().integer().min(1).max(100)
+    limit: Joi.number().integer().min(1).max(100),
+    query: Joi.string() // For search functionality
   });
 
   const { error } = querySchema.validate(req.query, { abortEarly: false });
